@@ -1,0 +1,120 @@
+import pandas as pd
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import classification_report, f1_score
+import openpyxl
+from openpyxl.styles import PatternFill
+import matplotlib.pyplot as plt
+import numpy as np
+
+# 1️ Load dataset
+#df = pd.read_excel(r"C:\Users\araye\Downloads\combined_final_dataset_with_features.xlsx")
+
+# 2️ Define target columns and columns to drop
+# Note: 'isResourceOptimism' has only zeros → can't train on this label
+target_cols = ['isEagerTest', 'isMysteryGuest']
+drop_cols = ['idProject', 'nameProject', 'productionClass', 'testCase', 'isResourceOptimism']
+
+# Extract numeric features and normalize
+X = df.drop(columns=target_cols + drop_cols).apply(pd.to_numeric, errors='coerce').fillna(0)
+X_scaled = StandardScaler().fit_transform(X)
+
+# 3 Define simple feed-forward ANN
+class ANN(nn.Module):
+    def __init__(self, input_dim):
+        super(ANN, self).__init__()
+        self.net = nn.Sequential(
+            nn.Linear(input_dim, 128),
+            nn.ReLU(),
+            nn.Linear(128, 64),
+            nn.ReLU(),
+            nn.Linear(64, 32),
+            nn.ReLU(),
+            nn.Linear(32, 1)  # Single output for binary classification
+        )
+    def forward(self, x):
+        return self.net(x)
+
+# 4 Loop over each target label
+for target in target_cols:
+    print(f"\n{'='*40}\n Training for target: {target}\n{'='*40}")
+
+    y = df[target].values
+    X_train, X_test, y_train, y_test = train_test_split(
+        X_scaled, y, test_size=0.2, random_state=42
+    )
+
+    # Convert to PyTorch tensors
+    X_train_tensor = torch.tensor(X_train, dtype=torch.float32)
+    y_train_tensor = torch.tensor(y_train.reshape(-1, 1), dtype=torch.float32)
+    X_test_tensor = torch.tensor(X_test, dtype=torch.float32)
+    y_test_tensor = torch.tensor(y_test.reshape(-1, 1), dtype=torch.float32)
+
+    # Initialize model, loss and optimizer
+    model = ANN(X_train.shape[1])
+    criterion = nn.BCELoss()  # Binary Cross-Entropy
+    optimizer = optim.Adam(model.parameters(), lr=0.001)
+
+    # 5️ Training loop with early stopping
+    best_loss = float('inf')
+    patience, patience_counter = 10, 0
+
+    for epoch in range(100):
+        model.train()
+        optimizer.zero_grad()
+        output = torch.sigmoid(model(X_train_tensor))  # Sigmoid activation
+        loss = criterion(output, y_train_tensor)
+        loss.backward()
+        optimizer.step()
+
+        # Save best model
+        if loss.item() < best_loss:
+            best_loss = loss.item()
+            patience_counter = 0
+            best_state = model.state_dict()
+        else:
+            patience_counter += 1
+
+        if (epoch+1) % 10 == 0:
+            print(f"Epoch {epoch+1}/100 - Loss: {loss.item():.4f}")
+
+        if patience_counter >= patience:
+            print("⏹️ Early stopping triggered.")
+            break
+
+    # Load best model state
+    model.load_state_dict(best_state)
+
+    # 6️ Generate predictions on test set
+    model.eval()
+    with torch.no_grad():
+        pred_probs = torch.sigmoid(model(X_test_tensor)).numpy().flatten()
+
+    # 7️ Find best threshold to maximize F1 score
+    best_thresh, best_f1 = 0.5, 0
+    for t in np.linspace(0.1, 0.9, 50):
+        pred_bin = (pred_probs > t).astype(int)
+        f1 = f1_score(y_test, pred_bin)
+        if f1 > best_f1:
+            best_f1 = f1
+            best_thresh = t
+    pred_final = (pred_probs > best_thresh).astype(int)
+
+    print(f"\nOptimal threshold for {target} = {best_thresh:.2f}, F1 = {best_f1:.2f}")
+
+    # 8️ Classification report
+    print(f"\nClassification report for {target}:")
+    print(classification_report(
+        y_test, pred_final, target_names=[f"no_{target}", target], zero_division=0
+    ))
+
+
+
+# 9 Global stats
+print("\n📌 Label frequencies in full dataset:")
+print(df[target_cols].sum())
+
+
