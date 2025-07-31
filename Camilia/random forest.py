@@ -45,7 +45,7 @@ y_pred = rf_model.predict(X_test)
 
 # classification report
 
-def report_multi():
+def report():
 
     print("\n classification report: test smell 1")
     print(classification_report(y_test[:, 0], y_pred[:, 0], target_names=["No", "Yes"], zero_division=0))
@@ -96,5 +96,5 @@ def confusion_matrices():
 
 # uncomment to print the report
 
-# report_multi()
+# report()
 # confusion_matrices()
