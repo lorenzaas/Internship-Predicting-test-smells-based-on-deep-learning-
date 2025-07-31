@@ -21,7 +21,7 @@ labels = ['MagicNumberTest_Manual']
 #  features 
 
 numerical_features = df.select_dtypes(include=['number']).columns.tolist()
-# features = [col for col in numerical_features if col not in labels]
+
 features = [
     'constructor', 'line', 'cbo', 'wmc', 'rfc', 'loc', 'returnsQty',
     'variablesQty', 'parametersQty', 'methodsInvokedQty', 'methodsInvokedLocalQty',
@@ -73,7 +73,7 @@ indices = np.argsort(importances)[::-1]
 sorted_features = [(features[i], round(importances[i], 4)) for i in indices]
 
 # output
-print(" Feature importance (sorted) for Magic Number Test:\n")
+print(" Feature importance (sorted):\n")
 for feature, importance in sorted_features[:15]:
     print(f"- {feature}: {importance}")
 
